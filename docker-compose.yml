@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  # 1. The Redis Database Container
+  redis:
+    image: redis:7-alpine
+    container_name: url_redis
+    ports:
+      - "6379:6379"
+
+  # 2. Your Python FastAPI Container
+  api:
+    build: .
+    container_name: url_api
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_HOST=redis  # This matches the service name above!
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
