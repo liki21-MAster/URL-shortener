@@ -13,10 +13,10 @@ COPY --from=builder /root/.local /root/.local
 ENV PATH=/root/.local/bin:$PATH
 
 # COPY YOUR FILE (Changed from main.py)
-COPY shortner.py .
+COPY main.py .
 
 # Expose the application port
 EXPOSE 8000
 
-# START THE SERVER (Changed from main:app to shortner:app)
-CMD ["uvicorn", "shortner:app", "--host", "0.0.0.0", "--port", "8000"]
+# START THE SERVER (Changed from main:app to main:app)
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

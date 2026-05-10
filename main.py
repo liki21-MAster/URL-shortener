@@ -1,30 +1,44 @@
+import os
+import redis
+import hashlib
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
-import shortener
-import database
+from prometheus_fastapi_instrumentator import Instrumentator
+
 
 app = FastAPI()
 
-class UrlRequest(BaseModel):
+# 1. Cloud-Native Environment Variables
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+
+# Connect to Redis
+cache = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+
+# 2. Prometheus Metrics Exposer
+Instrumentator().instrument(app).expose(app)
+
+class URLRequest(BaseModel):
     url: str
 
 @app.post("/shorten")
-def shorten_url(item: UrlRequest):
-    # 1. Get the next likely ID from the database
-    unique_id = database.get_next_id()
-    # 2. Generate the code (e.g., 101 -> '1D')
-    short_code = shortener.id_to_short(unique_id)
-    # 3. Save to database
-    database.save_url(item.url, short_code)
-    return {"short_url": f"http://127.0.0.1:8000/{short_code}", "code": short_code}
+def shorten_url(req: URLRequest):
+    short_id = hashlib.md5(req.url.encode()).hexdigest()[:6]
+    cache.set(short_id, req.url)
+    return {"short_url": f"http://localhost:8000/{short_id}"}
 
-@app.get("/{short_code}")
-def redirect_to_original(short_code: str):
-    # 1. Look up the code in the database
-    original_url = database.get_url(short_code)
+@app.get("/{short_id}")
+def redirect_url(short_id: str):
+    long_url = cache.get(short_id)
+    if long_url:
+        return {"redirect_to": long_url}
+    raise HTTPException(status_code=404, detail="URL not found")
 
-    if original_url:
-        return RedirectResponse(url=original_url)
-    else:
-        raise HTTPException(status_code=404, detail="URL not found")
+# 3. Kubernetes Liveness/Readiness Probe Endpoint
+@app.get("/healthz")
+def health_check():
+    try:
+        cache.ping()
+        return {"status": "healthy", "database": "connected"}
+    except redis.ConnectionError:
+        raise HTTPException(status_code=503, detail="Redis connection failed")
