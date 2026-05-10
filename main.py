@@ -11,11 +11,12 @@ class UrlRequest(BaseModel):
 
 @app.post("/shorten")
 def shorten_url(item: UrlRequest):
-    database.current_id += 1
-    unique_id = database.current_id
+    # 1. Get the next likely ID from the database
+    unique_id = database.get_next_id()
+    # 2. Generate the code (e.g., 101 -> '1D')
     short_code = shortener.id_to_short(unique_id)
+    # 3. Save to database
     database.save_url(item.url, short_code)
-
     return {"short_url": f"http://127.0.0.1:8000/{short_code}", "code": short_code}
 
 @app.get("/{short_code}")
@@ -24,8 +25,6 @@ def redirect_to_original(short_code: str):
     original_url = database.get_url(short_code)
 
     if original_url:
-        # <--- THIS IS THE MAGIC PART
-        # It tells the browser: "Don't show text, just GO to this address!"
         return RedirectResponse(url=original_url)
     else:
         raise HTTPException(status_code=404, detail="URL not found")
